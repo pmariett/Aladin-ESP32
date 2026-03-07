@@ -32,11 +32,11 @@ Only **one transistor and three resistors** are required.
 ---
 
 #### ## Repository structure
-
-- firmware\/   -> ESP32 firmware
-- hardware\/   -> wiring and hardware documentation
-- photos\/     -> prototype pictures
-- docs\/       -> additional documentation
+  
+firmware/   -> ESP32 firmware  
+hardware/   -> wiring and hardware documentation  
+photos/     -> prototype pictures  
+docs/       -> additional documentation  
 
 ---
 
@@ -61,17 +61,17 @@ Only **one transistor and three resistors** are required.
 ---
 
 #### # Wiring
-ESP32-C3                           NPN              ALADIN
-super mini                        2N2222              Pro
 
-GPIO5 ─── R10kΩ ───────────── C ───────── contact (-) (black wire)
-GPIO1 ─── R2kΩ ────────────── B ─┐
-                                      R100kΩ
-GND ─────────────────────── E ─┴────── contact B   (red wire)
-
-Where:
-- **contact (-)** = DATA
-- **contact B** = GND
+ESP32-C3             NPN               ALADIN  
+super mini          2N2222              Pro  
+  
+GPIO5 ─── R10kΩ ───── C ──────────── contact (-) (black wire)  
+GPIO1 ─── R2kΩ ────── B ── R100kΩ ─┐    
+GND ────────────── E ─────────┴── contact B   (red wire)  
+  
+Where :  
+- **contact (-)** = DATA  
+- **contact B** = GND  
 
 #### ## Prototype
 Prototype built on perfboard without ESP32-C3 super mini.
@@ -173,7 +173,8 @@ Code refinement, debugging assistance and documentation were supported using **C
 
 # Disclaimer
 
-Use this interface at your own risk.
+> [!CAUTION]
+> Use this interface at your own risk.
 
 This project is not affiliated with or endorsed by Uwatec or Scubapro.
 
