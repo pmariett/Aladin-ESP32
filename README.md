@@ -1,6 +1,18 @@
-# Aladin-ESP32
+# Aladin-ESP32 interface
 
-\# Uwatec Aladin Pro – ESP32-C3 Interface
+!\[License](https://img.shields.io/github/license/pmariett/Aladin-ESP32)
+
+!\[Platform](https://img.shields.io/badge/platform-ESP32--C3-blue)
+
+!\[Hardware](https://img.shields.io/badge/hardware-2N2222%20minimal-green)
+
+!\[Tested](https://img.shields.io/badge/tested-Wlog%20%7C%20PCDive%20%7C%20Subsurface-success)
+
+!\[GitHub repo size](https://img.shields.io/github/repo-size/pmariett/Aladin-ESP32)
+
+!\[GitHub stars](https://img.shields.io/github/stars/pmariett/Aladin-ESP32?style=social)
+
+### \# Uwatec Aladin Pro – ESP32-C3 Interface
 
 
 
@@ -24,7 +36,7 @@ The interface has been successfully tested with:
 
 
 
-\# Overview
+### \# Overview
 
 
 
@@ -44,11 +56,47 @@ Only \*\*one transistor and three resistors\*\* are required.
 
 
 
-\# Hardware
+#### \## Repository structure
 
 
 
-Required components:
+firmware/   -> ESP32 firmware
+
+hardware/   -> wiring and hardware documentation
+
+photos/     -> prototype pictures
+
+docs/       -> additional documentation
+
+
+
+---
+
+
+
+#### \## Features
+
+
+
+\- Minimal hardware
+
+\- ESP32-C3 USB native interface
+
+\- Compatible with multiple dive log software
+
+\- No proprietary interface required
+
+
+
+---
+
+
+
+### \# Hardware
+
+
+
+#### Required components:
 
 
 
@@ -70,7 +118,7 @@ Required components:
 
 
 
-\# Wiring
+#### \# Wiring
 
 ESP32-C3                           NPN              ALADIN
 
@@ -82,7 +130,7 @@ GPIO5 ─── R10kΩ ───────────── C ─────
 
 GPIO1 ─── R2kΩ ────────────── B ─┐
 
-&nbsp;                                     R100kΩ
+                                      R100kΩ
 
 GND ─────────────────────── E ─┴────── contact B   (red wire)
 
@@ -100,11 +148,25 @@ Where:
 
 
 
+#### \## Prototype
+
+
+
+Prototype built on perfboard without ESP32-C3 super mini.
+
+
+
+!\[Prototype 1](hardware/photos/20260307\_095238.jpg)
+
+!\[Prototype 2](hardware/photos/20260307\_095252.jpg)
+
+
+
 ---
 
 
 
-\# How it works
+#### \# How it works
 
 
 
@@ -128,11 +190,67 @@ The design was optimized experimentally for stability with the following resisto
 
 
 
+\## Communication flow
+
+PC software
+
+&nbsp;  │
+
+USB serial
+
+&nbsp;  │
+
+ESP32-C3
+
+&nbsp;  │
+
+UART bridge
+
+&nbsp;  │
+
+Uwatec Aladin Pro
+
+
+
+---
+
+#### \## Known working configuration
+
+
+
+ESP32-C3 Super Mini  
+
+Transistor: 2N2222  
+
+
+
+Resistors:
+
+\- 10kΩ (DATA sensing)
+
+\- 2kΩ (base drive)
+
+\- 100kΩ (base pull-down)
+
+
+
+Tested software:
+
+\- Wlog
+
+\- PCDive
+
+\- Subsurface
+
+
+
 ---
 
 
 
-\# Software
+
+
+### \# Software
 
 
 
@@ -151,11 +269,12 @@ Serial format: 8N1
 
 
 
+
 ---
 
 
 
-\# Tested Software
+#### \# Tested Software
 
 
 
@@ -179,7 +298,7 @@ Multiple connection cycles confirmed stable operation.
 
 
 
-\# Firmware
+#### \# Firmware
 
 
 
@@ -189,7 +308,7 @@ The firmware can be compiled with \*\*Arduino IDE\*\* using the ESP32-C3 board p
 
 Main principle:
 
-&nbsp;	PC <-> USB Serial <-> ESP32 <-> UART <-> Aladin
+ 	PC <-> USB Serial <-> ESP32 <-> UART <-> Aladin
 
 
 
@@ -197,7 +316,7 @@ Main principle:
 
 
 
-\# Hardware Implementation
+### \# Hardware Implementation
 
 
 
@@ -213,7 +332,7 @@ A small terminal block can be used for the Aladin cable.
 
 
 
-\# License
+### \# License
 
 
 
@@ -229,7 +348,7 @@ Copyright (c) 2026 Philippe Mariette
 
 
 
-\# Acknowledgements
+### \# Acknowledgements
 
 
 
@@ -254,10 +373,4 @@ Use this interface at your own risk.
 
 
 This project is not affiliated with or endorsed by Uwatec or Scubapro.
-
-
-
-
-
-
 
