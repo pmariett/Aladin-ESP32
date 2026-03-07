@@ -1,32 +1,23 @@
-# Prerequisites
-*.d
+# Arduino build files
+*.elf
+*.hex
+*.bin
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Arduino temporary files
+*.tmp
 
-# Precompiled Headers
-*.gch
-*.pch
+# Arduino IDE build folder
+/build
+/build-*
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+# macOS
+.DS_Store
 
-# Fortran module files
-*.mod
-*.smod
+# Windows
+Thumbs.db
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+# VSCode (si jamais)
+.vscode/
 
-# Executables
-*.exe
-*.out
-*.app
+# Logs
+*.log
