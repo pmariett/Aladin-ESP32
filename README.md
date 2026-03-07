@@ -1,7 +1,9 @@
 <p align="center">
   <img src="docs/images/banner.svg">
 </p>
+
 # Aladin-ESP32 interface
+
 ![License](https://img.shields.io/github/license/pmariett/Aladin-ESP32)
 ![Platform](https://img.shields.io/badge/platform-ESP32--C3-blue)
 ![Hardware](https://img.shields.io/badge/hardware-2N2222%20minimal-green)
