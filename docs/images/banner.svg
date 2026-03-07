@@ -1,0 +1,15 @@
+<svg width="900" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="900" height="200" fill="#0f172a"></rect>
+
+  <text x="450" y="80" font-family="Arial" font-size="36" fill="#38bdf8" text-anchor="middle" font-weight="bold">
+    Uwatec Aladin Pro Interface
+  </text>
+
+  <text x="450" y="120" font-family="Arial" font-size="22" fill="#e2e8f0" text-anchor="middle">
+    ESP32-C3 Minimal Hardware Adapter
+  </text>
+
+  <text x="450" y="160" font-family="Arial" font-size="16" fill="#94a3b8" text-anchor="middle">
+    Compatible with Wlog • PCDive • Subsurface
+  </text>
+</svg>
