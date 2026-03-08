@@ -50,6 +50,13 @@ docs/       -> additional documentation
 
 ### # Hardware
 
+### # Hardware Implementation
+The circuit can be built on a small perfboard and fits under the ESP32-C3 Super Mini module.
+
+A small terminal block can be used for the Aladin cable.
+
+---
+
 #### Required components:
 - ESP32-C3 Super Mini
 - 1 × NPN transistor (2N2222)
@@ -60,25 +67,43 @@ docs/       -> additional documentation
 
 ---
 
+#### Known working hardware
+
+Validated working values:  
+
+Resistors:  
+- R1 = 10 kΩ (DATA sensing)  
+- R2 = 2 kΩ  (base drive)  
+- R3 = 100 kΩ (base pull-down)   
+Transistor :  
+- 2N2222  
+Board :  
+- ESP32-C3 Super Mini  
+
+
 #### # Wiring
 
-ESP32-C3             NPN               ALADIN  
-super mini          2N2222              Pro  
-  
-GPIO5 ─── R10kΩ ───── C ──────────── contact (-) (black wire)  
-GPIO1 ─── R2kΩ ────── B ── R100kΩ ─┐    
-GND ────────────── E ─────────┴── contact B   (red wire)  
-  
-Where :  
-- **contact (-)** = DATA  
-- **contact B** = GND  
+Working wiring:
 
+ESP32-C3 Super Mini          2N2222               Uwatec Aladin Pro
+
+GPIO5 --- R1 10kΩ -----------+-------------------- contact (-) DATA
+                             |
+                             C
+GPIO1 --- R2 2kΩ ------------B
+                             |
+                             R3 100kΩ
+                             |
+GND -------------------------E-------------------- contact B GND---
+
+---
 #### ## Prototype
 Prototype built on perfboard without ESP32-C3 super mini.
 
 ![Prototype 1](hardware/photos/20260307\_095238.jpg)
 ![Prototype 2](hardware/photos/20260307\_095252.jpg)
 
+Other views in hardware/photos/  
 ---
 
 #### # How it works
@@ -87,11 +112,7 @@ Prototype built on perfboard without ESP32-C3 super mini.
 - The transistor pulls the Aladin DATA line low when transmitting
 - The DATA line is also monitored by the ESP32 through a resistor
 
-The design was optimized experimentally for stability with the following resistor values:
-
-- 10kΩ (DATA sensing)
-- 2kΩ (base drive)
-- 100kΩ (base pull-down)
+---
 
 ## Communication flow
 PC software
@@ -105,22 +126,6 @@ UART bridge
 Uwatec Aladin Pro
 
 ---
-#### ## Known working configuration
-
-ESP32-C3 Super Mini  
-Transistor: 2N2222  
-
-Resistors:
-- 10kΩ (DATA sensing)
-- 2kΩ (base drive)
-- 100kΩ (base pull-down)
-
-Tested software:
-- Wlog
-- PCDive
-- Subsurface
-
----
 
 ### # Software
 The ESP32 firmware is a minimal serial bridge.
@@ -132,7 +137,16 @@ Serial format: 8N1
 
 ---
 
-#### # Tested Software
+#### # Firmware
+The firmware can be compiled with **Arduino IDE** using the ESP32-C3 board package.
+
+Main principle:
+ 	PC <-> USB Serial <-> ESP32 <-> UART <-> Aladin
+
+---
+
+## Tested software
+
 The interface has been successfully tested with:
 
 - **Wlog**
@@ -143,20 +157,23 @@ Multiple connection cycles confirmed stable operation.
 
 ---
 
-#### # Firmware
-The firmware can be compiled with **Arduino IDE** using the ESP32-C3 board package.
+## Additional tested configuration
 
-Main principle:
- 	PC <-> USB Serial <-> ESP32 <-> UART <-> Aladin
+The interface was also successfully tested with **Subsurface on Android** using a **USB OTG connection**.
+
+Validated setup:
+- Android phone with USB OTG support
+- ESP32-C3 Super Mini interface connected by USB
+- Uwatec Aladin Pro connected to the interface
+- Subsurface mobile on Android
+
+Result:
+- Dive computer detected
+- Dive information readable
+- Dive download working
 
 ---
 
-### # Hardware Implementation
-The circuit can be built on a small perfboard and fits under the ESP32-C3 Super Mini module.
-
-A small terminal block can be used for the Aladin cable.
-
----
 
 ### # License
 MIT License
