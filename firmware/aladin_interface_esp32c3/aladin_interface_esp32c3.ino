@@ -28,7 +28,7 @@ WIRING
 #define ALADIN_RX 5               // ALADIN DATA (-) -> 10kΩ -> GPIO5
 #define ALADIN_TX -1              // N/A
 #define PIN_TRIGGER 1             // GPIO1 -> 2kΩ -> Base 2N2222
-#define USB_BAUDRATE 115200        // vitesse échange port série du PC
+#define USB_BAUDRATE 115200       // vitesse échange port série du PC
 #define ALADIN_BAUDRATE 19200     // vitesse échange port série Aladin
 #define INVERT_UART false         // inversion des polarités RX/TX
 
