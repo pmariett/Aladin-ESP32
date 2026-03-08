@@ -41,7 +41,7 @@ WIRING
 #define INVERT_UART      false
 
 #define LED_PIN          LED_BUILTIN
-#define BLE_DEVICE_NAME  "Aladin-ESP32"
+#define BLE_DEVICE_NAME  "Aladin-ESP32-Monitor"
 
 #define BLE_SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 #define BLE_RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"   // phone -> ESP32
@@ -55,18 +55,30 @@ NimBLECharacteristic* pRxChar = nullptr;
 
 volatile bool bleClientConnected = false;
 
-static uint8_t txBuffer[20];
-static size_t txLength = 0;
-
+// LED management
 bool ledPulseActive = false;
 uint32_t ledPulseUntilMs = 0;
 
+// Trigger pulse mode
 bool autoPulseEnabled = false;
 uint32_t lastAutoPulseMs = 0;
-const uint32_t autoPulsePeriodMs = 1000;
+const uint32_t autoPulsePeriodMs = 100;
 
+// Stats
 uint32_t rxByteCount = 0;
 uint32_t bleWriteCount = 0;
+uint32_t frameCount = 0;
+
+// RX formatter
+static const size_t RAW_BUF_SIZE = 8;
+uint8_t rawBuffer[RAW_BUF_SIZE];
+size_t rawLength = 0;
+uint32_t lastRxByteMs = 0;
+const uint32_t RAW_FLUSH_TIMEOUT_MS = 30;
+
+// Duplicate filtering
+uint8_t lastSentBuffer[RAW_BUF_SIZE];
+size_t lastSentLength = 0;
 
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
@@ -102,25 +114,8 @@ static void updateLed() {
   }
 }
 
-static void txFlush() {
-  if (!bleClientConnected || txLength == 0) return;
-
-  pTxChar->setValue(txBuffer, txLength);
-  pTxChar->notify();
-  txLength = 0;
-  pulseLed();
-}
-
-static void txPush(uint8_t stream) {
-  txBuffer[txLength++] = stream;
-  if (txLength >= sizeof(txBuffer)) {
-    txFlush();
-  }
-}
-
-static void txText(const char* message) {
+static void bleSendText(const char* message) {
   if (!bleClientConnected) return;
-
   pTxChar->setValue((const uint8_t*)message, strlen(message));
   pTxChar->notify();
   pulseLed();
@@ -133,58 +128,122 @@ static void triggerPulse(uint32_t pulseMs = 25) {
 }
 
 static void sendStatus() {
-  char status[96];
+  char status[64];
   snprintf(
     status,
     sizeof(status),
-    "rx=%lu ble=%lu auto=%s",
+    "STAT r=%lu b=%lu a=%c f=%lu",
     (unsigned long)rxByteCount,
     (unsigned long)bleWriteCount,
-    autoPulseEnabled ? "on" : "off"
+    autoPulseEnabled ? '1' : '0',
+    (unsigned long)frameCount
   );
-  txText(status);
+  bleSendText(status);
+}
+
+static bool isAllZero(const uint8_t* data, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    if (data[i] != 0x00) return false;
+  }
+  return true;
+}
+
+static bool isDuplicateOfLast(const uint8_t* data, size_t len) {
+  if (len != lastSentLength) return false;
+  if (len == 0) return false;
+
+  for (size_t i = 0; i < len; i++) {
+    if (data[i] != lastSentBuffer[i]) return false;
+  }
+  return true;
+}
+
+static void rememberLast(const uint8_t* data, size_t len) {
+  lastSentLength = len;
+  for (size_t i = 0; i < len; i++) {
+    lastSentBuffer[i] = data[i];
+  }
+}
+
+static void flushRawBufferAsHex() {
+  if (rawLength == 0) return;
+
+  if (isAllZero(rawBuffer, rawLength)) {
+    rawLength = 0;
+    return;
+  }
+
+  if (isDuplicateOfLast(rawBuffer, rawLength)) {
+    rawLength = 0;
+    return;
+  }
+
+  rememberLast(rawBuffer, rawLength);
+  frameCount++;
+
+  char line[128];
+  size_t pos = 0;
+
+  pos += snprintf(line + pos, sizeof(line) - pos, "RX[%03lu] ", (unsigned long)frameCount);
+
+  for (size_t i = 0; i < rawLength && pos < sizeof(line) - 4; i++) {
+    pos += snprintf(line + pos, sizeof(line) - pos, "%02X", rawBuffer[i]);
+    if (i + 1 < rawLength && pos < sizeof(line) - 2) {
+      line[pos++] = ' ';
+      line[pos] = '\0';
+    }
+  }
+
+  bleSendText(line);
+  rawLength = 0;
 }
 
 class RxCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* pCharacteristic) override {
-    String value = pCharacteristic->getValue();
-    if (value.length() == 0) return;
+  void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
+    std::string value = pCharacteristic->getValue();
+    if (value.empty()) return;
 
     bleWriteCount++;
 
-    // Commandes texte simples depuis nRF Connect
-    // "pulse"  -> impulsion sur PIN_TRIGGER
-    // "auto on" / "auto off"
-    // "status"
-    if (value == "pulse") {
+    String cmd = String(value.c_str());
+    cmd.trim();
+
+    if (cmd == "pulse") {
       triggerPulse();
-      txText("pulse ok");
+      bleSendText("CMD pulse ok");
       return;
     }
 
-    if (value == "auto on") {
+    if (cmd == "auto on") {
       autoPulseEnabled = true;
-      txText("auto on");
+      bleSendText("CMD auto on");
       return;
     }
 
-    if (value == "auto off") {
+    if (cmd == "auto off") {
       autoPulseEnabled = false;
-      txText("auto off");
+      bleSendText("CMD auto off");
       return;
     }
 
-    if (value == "status") {
+    if (cmd == "status") {
       sendStatus();
       return;
     }
 
-    // Sinon, on renvoie les octets reçus côté BLE pour debug
-    txText("ble rx");
-    for (size_t i = 0; i < value.length(); i++) {
-      txPush((uint8_t)value[i]);
+    char line[96];
+    size_t pos = 0;
+    pos += snprintf(line + pos, sizeof(line) - pos, "BLE ");
+
+    for (size_t i = 0; i < value.length() && pos < sizeof(line) - 4; i++) {
+      pos += snprintf(line + pos, sizeof(line) - pos, "%02X", (uint8_t)value[i]);
+      if (i + 1 < value.length() && pos < sizeof(line) - 2) {
+        line[pos++] = ' ';
+        line[pos] = '\0';
+      }
     }
-    txFlush();
+
+    bleSendText(line);
   }
 };
 
@@ -230,19 +289,24 @@ void setup() {
 }
 
 void loop() {
-  // Aladin -> BLE
   while (AladinSerial.available()) {
     uint8_t stream = AladinSerial.read();
     rxByteCount++;
-    txPush(stream);
+
+    if (rawLength < RAW_BUF_SIZE) {
+      rawBuffer[rawLength++] = stream;
+    } else {
+      flushRawBufferAsHex();
+      rawBuffer[rawLength++] = stream;
+    }
+
+    lastRxByteMs = millis();
   }
 
-  static uint32_t lastFlushMs = 0;
   uint32_t now = millis();
 
-  if (now - lastFlushMs > 20) {
-    txFlush();
-    lastFlushMs = now;
+  if (rawLength > 0 && (now - lastRxByteMs > RAW_FLUSH_TIMEOUT_MS)) {
+    flushRawBufferAsHex();
   }
 
   if (autoPulseEnabled && (now - lastAutoPulseMs > autoPulsePeriodMs)) {
