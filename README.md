@@ -11,7 +11,7 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/pmariett/Aladin-ESP32)
 ![GitHub stars](https://img.shields.io/github/stars/pmariett/Aladin-ESP32?style=social)
 
-### # Uwatec Aladin Pro – ESP32-C3 Interface
+## Uwatec Aladin Pro – ESP32-C3 Interface
 
 Minimal hardware interface to download dive logs from an **Uwatec Aladin Pro** dive computer using an **ESP32-C3 Super Mini**.
 
@@ -22,25 +22,21 @@ The interface has been successfully tested with:
 
 ---
 
-### # Overview
+## Overview
 This project implements a very simple hardware interface allowing communication between the **Uwatec Aladin Pro** and a computer via USB using an **ESP32-C3**.
 
 The ESP32 acts as a **transparent serial bridge** between the PC and the dive computer.
 
 Only **one transistor and three resistors** are required.
 
----
-
-#### ## Repository structure
+### Repository structure
   
 firmware/   -> ESP32 firmware  
 hardware/   -> wiring and hardware documentation  
 photos/     -> prototype pictures  
 docs/       -> additional documentation  
 
----
-
-#### ## Features
+### Features
 - Minimal hardware
 - ESP32-C3 USB native interface
 - Compatible with multiple dive log software
@@ -48,16 +44,14 @@ docs/       -> additional documentation
 
 ---
 
-### # Hardware
+## Hardware
 
-### # Hardware Implementation
+### Hardware Implementation
 The circuit can be built on a small perfboard and fits under the ESP32-C3 Super Mini module.
 
 A small terminal block can be used for the Aladin cable.
 
----
-
-#### Required components:
+### Required components:
 - ESP32-C3 Super Mini
 - 1 × NPN transistor (2N2222)
 - 1 × 10kΩ resistor
@@ -65,23 +59,21 @@ A small terminal block can be used for the Aladin cable.
 - 1 × 100kΩ resistor
 - 2 wires to the Aladin contacts
 
----
-
-#### Known working hardware
-
+### Known working hardware
 Validated working values:  
 
 Resistors:  
 - R1 = 10 kΩ (DATA sensing)  
 - R2 = 2 kΩ  (base drive)  
 - R3 = 100 kΩ (base pull-down)   
+
 Transistor :  
 - 2N2222  
+
 Board :  
 - ESP32-C3 Super Mini  
 
-
-#### # Wiring
+### Wiring
 
 Working wiring:
 
@@ -96,25 +88,20 @@ GPIO1 --- R2 2kΩ ------------B
                              |
 GND -------------------------E-------------------- contact B GND---
 
----
-#### ## Prototype
+### Prototype
 Prototype built on perfboard without ESP32-C3 super mini.
 
 ![Prototype 1](hardware/photos/20260307\_095238.jpg)
 ![Prototype 2](hardware/photos/20260307\_095252.jpg)
 
 Other views in hardware/photos/  
----
 
-#### # How it works
-
+### How it works
 - The ESP32 acts as a **USB serial adapter**
 - The transistor pulls the Aladin DATA line low when transmitting
 - The DATA line is also monitored by the ESP32 through a resistor
 
----
-
-## Communication flow
+#### Communication flow
 PC software
 &nbsp;  │
 USB serial
@@ -127,25 +114,22 @@ Uwatec Aladin Pro
 
 ---
 
-### # Software
+## Software
+
+### Firmware
 The ESP32 firmware is a minimal serial bridge.
 
-Communication parameters:
+#### Communication parameters:
 PC baudrate: 115200
 Aladin baudrate: 19200
 Serial format: 8N1
 
----
-
-#### # Firmware
 The firmware can be compiled with **Arduino IDE** using the ESP32-C3 board package.
 
-Main principle:
+#### Main principle:
  	PC <-> USB Serial <-> ESP32 <-> UART <-> Aladin
 
----
-
-## Tested software
+### Tested software
 
 The interface has been successfully tested with:
 
@@ -155,9 +139,7 @@ The interface has been successfully tested with:
 
 Multiple connection cycles confirmed stable operation.
 
----
-
-## Additional tested configuration
+#### Additional tested configuration
 
 The interface was also successfully tested with **Subsurface on Android** using a **USB OTG connection**.
 
@@ -174,24 +156,22 @@ Result:
 
 ---
 
-
-### # License
+## License
 MIT License
 Copyright (c) 2026 Philippe Mariette
 
 ---
 
-### # Acknowledgements
+## Acknowledgements
 Project developed by **Philippe MARIETTE**.
 
 Code refinement, debugging assistance and documentation were supported using **ChatGPT (OpenAI)**.
 
 ---
 
-# Disclaimer
+## Disclaimer
 
 > [!CAUTION]
 > Use this interface at your own risk.
 
 This project is not affiliated with or endorsed by Uwatec or Scubapro.
-
