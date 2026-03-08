@@ -28,9 +28,9 @@ WIRING
 #define ALADIN_RX 5               // ALADIN DATA (-) -> 10kΩ -> GPIO5
 #define ALADIN_TX -1              // N/A
 #define PIN_TRIGGER 1             // GPIO1 -> 2kΩ -> Base 2N2222
-#define PC_BAUDRATE 115200        // vitesse échange port série du PC
+#define USB_BAUDRATE 115200        // vitesse échange port série du PC
 #define ALADIN_BAUDRATE 19200     // vitesse échange port série Aladin
-#define INVERT_TXRX false         // inversion des polarités RX/TX
+#define INVERT_UART false         // inversion des polarités RX/TX
 
 HardwareSerial AladinSerial(1);   // Communication Série avec l'Aladin
 
@@ -41,9 +41,9 @@ void setup()
 
   digitalWrite(PIN_TRIGGER, LOW);
 
-  Serial.begin(PC_BAUDRATE);
+  Serial.begin(USB_BAUDRATE);
 
-  AladinSerial.begin(ALADIN_BAUDRATE,SERIAL_8N1,ALADIN_RX,ALADIN_TX,INVERT_TXRX);
+  AladinSerial.begin(ALADIN_BAUDRATE,SERIAL_8N1,ALADIN_RX,ALADIN_TX,INVERT_UART);
   
   digitalWrite(LED_BUILTIN, LOW);
 }

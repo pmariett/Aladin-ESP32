@@ -31,10 +31,10 @@ Only **one transistor and three resistors** are required.
 
 ### Repository structure
   
-firmware/   -> ESP32 firmware  
-hardware/   -> wiring and hardware documentation  
-photos/     -> prototype pictures  
-docs/       -> additional documentation  
+firmware/			-> ESP32 firmware  
+hardware/			-> wiring and hardware documentation  
+hardware/photos/	-> prototype pictures  
+docs/				-> additional documentation  
 
 ### Features
 - Minimal hardware
