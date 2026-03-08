@@ -2,35 +2,32 @@
 ==========================================================================================
 
 Uwatec Aladin Pro experimental BLE interface
-for the validated ESP32-C3 + 2N2222 hardware.
+ESP32-C3 Super Mini + 2N2222
+Raw triggered capture version
 
-IMPORTANT:
-With the validated hardware, GPIO1 is NOT a real UART TX.
-It only drives the 2N2222 transistor stage.
+Hardware:
+- GPIO5  = RX from Aladin
+- GPIO1  = trigger pulse via transistor stage (NOT a normal UART TX)
+- BLE    = Nordic UART Service (NUS)
 
-So this sketch is NOT a full bidirectional serial bridge.
-It is an experimental BLE autonomous monitor with optional trigger pulses.
+Main behavior:
+- watches UART stream for trigger pattern 55 55 55 00
+- stores raw bytes continuously after trigger
+- allows status / peek / dump over BLE NUS
+- mirrors debug to USB Serial
 
 MIT License
 Copyright (c) 2026 Philippe Mariette
-
-------------------------------------------------------------------------------------------
-
-WIRING
-
-  ESP32-C3                   NPN            ALADIN
- super mini                 2N2222            Pro
-
- GPIO5 ─── R10kΩ ───────────── C ───────── contact (-) (black wire)
- GPIO1 ───  R2kΩ ───────────── B ─┐
-                                R100kΩ
- GND ──────────────────────────E ─┴─────── contact B (red wire)
 
 ==========================================================================================
 */
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+
+// ---------------------------------------------------------------------------------------
+// Pins / serial
+// ---------------------------------------------------------------------------------------
 
 #define ALADIN_RX        5
 #define ALADIN_TX        -1
@@ -41,11 +38,38 @@ WIRING
 #define INVERT_UART      false
 
 #define LED_PIN          LED_BUILTIN
+
+// ---------------------------------------------------------------------------------------
+// BLE NUS
+// ---------------------------------------------------------------------------------------
+
 #define BLE_DEVICE_NAME  "Aladin-ESP32-Monitor"
 
 #define BLE_SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-#define BLE_RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"   // phone -> ESP32
-#define BLE_TX_UUID      "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"   // ESP32 -> phone
+#define BLE_RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define BLE_TX_UUID      "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+
+// ---------------------------------------------------------------------------------------
+// Trigger / capture
+// ---------------------------------------------------------------------------------------
+
+static const uint8_t TRIG0 = 0x55;
+static const uint8_t TRIG1 = 0x55;
+static const uint8_t TRIG2 = 0x55;
+static const uint8_t TRIG3 = 0x00;
+
+// Raw byte capture size
+#define MAX_CAPTURE_BYTES 1200
+
+// Auto pulse
+const uint32_t autoPulsePeriodMs = 1000;
+
+// BLE pacing
+const uint16_t bleLineDelayMs = 10;
+
+// ---------------------------------------------------------------------------------------
+// Globals
+// ---------------------------------------------------------------------------------------
 
 HardwareSerial AladinSerial(1);
 
@@ -55,43 +79,33 @@ NimBLECharacteristic* pRxChar = nullptr;
 
 volatile bool bleClientConnected = false;
 
-// LED management
+// LED
 bool ledPulseActive = false;
 uint32_t ledPulseUntilMs = 0;
-
-// Trigger pulse mode
-bool autoPulseEnabled = false;
-uint32_t lastAutoPulseMs = 0;
-const uint32_t autoPulsePeriodMs = 100;
 
 // Stats
 uint32_t rxByteCount = 0;
 uint32_t bleWriteCount = 0;
-uint32_t frameCount = 0;
+uint32_t captureStartRxIndex = 0;
 
-// RX formatter
-static const size_t RAW_BUF_SIZE = 8;
-uint8_t rawBuffer[RAW_BUF_SIZE];
-size_t rawLength = 0;
-uint32_t lastRxByteMs = 0;
-const uint32_t RAW_FLUSH_TIMEOUT_MS = 30;
+// Pulse mode
+bool autoPulseEnabled = false;
+uint32_t lastAutoPulseMs = 0;
 
-// Duplicate filtering
-uint8_t lastSentBuffer[RAW_BUF_SIZE];
-size_t lastSentLength = 0;
+// Trigger detection
+uint8_t triggerWindow[4] = {0, 0, 0, 0};
+bool captureArmed = true;
+bool captureTriggered = false;
+bool captureDone = false;
+bool captureDoneNotified = false;
 
-class ServerCallbacks : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
-    bleClientConnected = true;
-    digitalWrite(LED_PIN, HIGH);
-  }
+// Capture storage
+uint8_t captureBytes[MAX_CAPTURE_BYTES];
+uint16_t captureLen = 0;
 
-  void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
-    bleClientConnected = false;
-    digitalWrite(LED_PIN, LOW);
-    NimBLEDevice::startAdvertising();
-  }
-};
+// ---------------------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------------------
 
 static void pulseLed() {
   ledPulseActive = true;
@@ -114,89 +128,222 @@ static void updateLed() {
   }
 }
 
+static void usbLog(const char* msg) {
+  Serial.println(msg);
+}
+
 static void bleSendText(const char* message) {
+  // Always mirror to USB serial for debugging
+  Serial.print("BLE TX: ");
+  Serial.println(message);
+
   if (!bleClientConnected) return;
+
   pTxChar->setValue((const uint8_t*)message, strlen(message));
   pTxChar->notify();
   pulseLed();
+  delay(bleLineDelayMs);
 }
 
 static void triggerPulse(uint32_t pulseMs = 25) {
+  Serial.print("TRIGGER pulse ");
+  Serial.print(pulseMs);
+  Serial.println(" ms");
+
   digitalWrite(PIN_TRIGGER, HIGH);
   delay(pulseMs);
   digitalWrite(PIN_TRIGGER, LOW);
 }
 
+static void resetCapture() {
+  captureArmed = true;
+  captureTriggered = false;
+  captureDone = false;
+  captureDoneNotified = false;
+  captureLen = 0;
+  captureStartRxIndex = 0;
+
+  triggerWindow[0] = 0;
+  triggerWindow[1] = 0;
+  triggerWindow[2] = 0;
+  triggerWindow[3] = 0;
+}
+
+static void pushTriggerWindow(uint8_t b) {
+  triggerWindow[0] = triggerWindow[1];
+  triggerWindow[1] = triggerWindow[2];
+  triggerWindow[2] = triggerWindow[3];
+  triggerWindow[3] = b;
+}
+
+static bool triggerMatched() {
+  return triggerWindow[0] == TRIG0 &&
+         triggerWindow[1] == TRIG1 &&
+         triggerWindow[2] == TRIG2 &&
+         triggerWindow[3] == TRIG3;
+}
+
+static void markCaptureDoneIfNeeded() {
+  if (captureDone && !captureDoneNotified) {
+    captureDoneNotified = true;
+    bleSendText("CAPTURE done");
+  }
+}
+
+static void storeCapturedByte(uint8_t b) {
+  if (captureDone) return;
+
+  if (captureLen < MAX_CAPTURE_BYTES) {
+    captureBytes[captureLen++] = b;
+  } else {
+    captureDone = true;
+    markCaptureDoneIfNeeded();
+  }
+}
+
+static void sendInfo() {
+  char line[128];
+
+  bleSendText("INFO device=ESP32-C3 Aladin BLE monitor");
+  bleSendText("INFO mode=raw triggered capture");
+
+  snprintf(line, sizeof(line), "INFO usb_baud=%u", USB_BAUDRATE);
+  bleSendText(line);
+
+  snprintf(line, sizeof(line), "INFO aladin_baud=%u", ALADIN_BAUDRATE);
+  bleSendText(line);
+
+  snprintf(line, sizeof(line), "INFO invert_uart=%u", INVERT_UART ? 1 : 0);
+  bleSendText(line);
+
+  snprintf(line, sizeof(line), "INFO trigger=%02X %02X %02X %02X",
+           TRIG0, TRIG1, TRIG2, TRIG3);
+  bleSendText(line);
+
+  snprintf(line, sizeof(line), "INFO max_capture_bytes=%u", MAX_CAPTURE_BYTES);
+  bleSendText(line);
+
+  snprintf(line, sizeof(line), "INFO auto_pulse_period_ms=%lu",
+           (unsigned long)autoPulsePeriodMs);
+  bleSendText(line);
+}
+
 static void sendStatus() {
-  char status[64];
+  char line[160];
+
   snprintf(
-    status,
-    sizeof(status),
-    "STAT r=%lu b=%lu a=%c f=%lu",
+    line,
+    sizeof(line),
+    "STAT r=%lu b=%lu a=%c arm=%c trg=%c done=%c n=%u start=%lu",
     (unsigned long)rxByteCount,
     (unsigned long)bleWriteCount,
     autoPulseEnabled ? '1' : '0',
-    (unsigned long)frameCount
+    captureArmed ? '1' : '0',
+    captureTriggered ? '1' : '0',
+    captureDone ? '1' : '0',
+    captureLen,
+    (unsigned long)captureStartRxIndex
   );
-  bleSendText(status);
-}
-
-static bool isAllZero(const uint8_t* data, size_t len) {
-  for (size_t i = 0; i < len; i++) {
-    if (data[i] != 0x00) return false;
-  }
-  return true;
-}
-
-static bool isDuplicateOfLast(const uint8_t* data, size_t len) {
-  if (len != lastSentLength) return false;
-  if (len == 0) return false;
-
-  for (size_t i = 0; i < len; i++) {
-    if (data[i] != lastSentBuffer[i]) return false;
-  }
-  return true;
-}
-
-static void rememberLast(const uint8_t* data, size_t len) {
-  lastSentLength = len;
-  for (size_t i = 0; i < len; i++) {
-    lastSentBuffer[i] = data[i];
-  }
-}
-
-static void flushRawBufferAsHex() {
-  if (rawLength == 0) return;
-
-  if (isAllZero(rawBuffer, rawLength)) {
-    rawLength = 0;
-    return;
-  }
-
-  if (isDuplicateOfLast(rawBuffer, rawLength)) {
-    rawLength = 0;
-    return;
-  }
-
-  rememberLast(rawBuffer, rawLength);
-  frameCount++;
-
-  char line[128];
-  size_t pos = 0;
-
-  pos += snprintf(line + pos, sizeof(line) - pos, "RX[%03lu] ", (unsigned long)frameCount);
-
-  for (size_t i = 0; i < rawLength && pos < sizeof(line) - 4; i++) {
-    pos += snprintf(line + pos, sizeof(line) - pos, "%02X", rawBuffer[i]);
-    if (i + 1 < rawLength && pos < sizeof(line) - 2) {
-      line[pos++] = ' ';
-      line[pos] = '\0';
-    }
-  }
 
   bleSendText(line);
-  rawLength = 0;
 }
+
+static void dumpRange(uint16_t maxBytesToSend) {
+  if (captureLen == 0) {
+    bleSendText("DUMP empty");
+    return;
+  }
+
+  char line[128];
+  uint16_t count = captureLen;
+
+  if (maxBytesToSend > 0 && count > maxBytesToSend) {
+    count = maxBytesToSend;
+  }
+
+  for (uint16_t i = 0; i < count; i += 8) {
+    uint16_t remain = count - i;
+    uint8_t n = (remain >= 8) ? 8 : remain;
+
+    // Build line incrementally
+    int pos = snprintf(line, sizeof(line), "%04u:", i);
+    for (uint8_t k = 0; k < n && pos < (int)sizeof(line) - 4; k++) {
+      pos += snprintf(line + pos, sizeof(line) - pos, " %02X", captureBytes[i + k]);
+    }
+
+    bleSendText(line);
+  }
+
+  if (count < captureLen) {
+    snprintf(line, sizeof(line), "DUMP partial %u/%u bytes", count, captureLen);
+    bleSendText(line);
+  } else {
+    bleSendText("DUMP end");
+  }
+}
+
+static void dumpCapture() {
+  dumpRange(0);
+}
+
+static void peekCapture() {
+  dumpRange(64);
+}
+
+// ---------------------------------------------------------------------------------------
+// Incoming UART processing
+// ---------------------------------------------------------------------------------------
+
+static void processIncomingByte(uint8_t b) {
+  rxByteCount++;
+  pushTriggerWindow(b);
+
+  if (captureArmed && !captureTriggered && triggerMatched()) {
+    captureArmed = false;
+    captureTriggered = true;
+    captureDone = false;
+    captureDoneNotified = false;
+
+    // Include the trigger bytes themselves in capture
+    captureLen = 0;
+    captureStartRxIndex = rxByteCount - 4;
+
+    storeCapturedByte(TRIG0);
+    storeCapturedByte(TRIG1);
+    storeCapturedByte(TRIG2);
+    storeCapturedByte(TRIG3);
+
+    Serial.println("TRIGGER matched: 55 55 55 00");
+    bleSendText("TRIGGER 55 55 55 00");
+    return;
+  }
+
+  if (!captureTriggered || captureDone) {
+    return;
+  }
+
+  storeCapturedByte(b);
+}
+
+// ---------------------------------------------------------------------------------------
+// BLE callbacks
+// ---------------------------------------------------------------------------------------
+
+class ServerCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* server, NimBLEConnInfo& connInfo) override {
+    bleClientConnected = true;
+    digitalWrite(LED_PIN, HIGH);
+    Serial.println("BLE client connected");
+  }
+
+  void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
+    bleClientConnected = false;
+    digitalWrite(LED_PIN, LOW);
+    Serial.print("BLE client disconnected, reason=");
+    Serial.println(reason);
+    NimBLEDevice::startAdvertising();
+  }
+};
 
 class RxCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override {
@@ -205,8 +352,46 @@ class RxCallbacks : public NimBLECharacteristicCallbacks {
 
     bleWriteCount++;
 
+    Serial.print("BLE RX raw: ");
+    Serial.println(value.c_str());
+
     String cmd = String(value.c_str());
     cmd.trim();
+
+    Serial.print("BLE RX cmd: ");
+    Serial.println(cmd);
+
+    if (cmd == "status") {
+      sendStatus();
+      return;
+    }
+
+    if (cmd == "info") {
+      sendInfo();
+      return;
+    }
+
+    if (cmd == "dump") {
+      dumpCapture();
+      return;
+    }
+
+    if (cmd == "peek") {
+      peekCapture();
+      return;
+    }
+
+    if (cmd == "clear") {
+      resetCapture();
+      bleSendText("CMD clear ok");
+      return;
+    }
+
+    if (cmd == "arm") {
+      resetCapture();
+      bleSendText("CMD arm ok");
+      return;
+    }
 
     if (cmd == "pulse") {
       triggerPulse();
@@ -226,26 +411,13 @@ class RxCallbacks : public NimBLECharacteristicCallbacks {
       return;
     }
 
-    if (cmd == "status") {
-      sendStatus();
-      return;
-    }
-
-    char line[96];
-    size_t pos = 0;
-    pos += snprintf(line + pos, sizeof(line) - pos, "BLE ");
-
-    for (size_t i = 0; i < value.length() && pos < sizeof(line) - 4; i++) {
-      pos += snprintf(line + pos, sizeof(line) - pos, "%02X", (uint8_t)value[i]);
-      if (i + 1 < value.length() && pos < sizeof(line) - 2) {
-        line[pos++] = ' ';
-        line[pos] = '\0';
-      }
-    }
-
-    bleSendText(line);
+    bleSendText("CMD ?");
   }
 };
+
+// ---------------------------------------------------------------------------------------
+// Setup / loop
+// ---------------------------------------------------------------------------------------
 
 void setup() {
   pinMode(PIN_TRIGGER, OUTPUT);
@@ -255,8 +427,15 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
 
   Serial.begin(USB_BAUDRATE);
+  delay(200);
+
+  Serial.println();
+  Serial.println("BOOT OK");
+  Serial.println("Uwatec Aladin Pro BLE monitor - raw capture");
 
   AladinSerial.begin(ALADIN_BAUDRATE, SERIAL_8N1, ALADIN_RX, ALADIN_TX, INVERT_UART);
+
+  resetCapture();
 
   NimBLEDevice::init(BLE_DEVICE_NAME);
   NimBLEDevice::setDeviceName(BLE_DEVICE_NAME);
@@ -286,33 +465,23 @@ void setup() {
   pAdvertising->addServiceUUID(BLE_SERVICE_UUID);
   pAdvertising->enableScanResponse(true);
   pAdvertising->start();
+
+  Serial.println("BLE advertising started");
 }
 
 void loop() {
   while (AladinSerial.available()) {
-    uint8_t stream = AladinSerial.read();
-    rxByteCount++;
-
-    if (rawLength < RAW_BUF_SIZE) {
-      rawBuffer[rawLength++] = stream;
-    } else {
-      flushRawBufferAsHex();
-      rawBuffer[rawLength++] = stream;
-    }
-
-    lastRxByteMs = millis();
+    uint8_t b = (uint8_t)AladinSerial.read();
+    processIncomingByte(b);
   }
 
   uint32_t now = millis();
-
-  if (rawLength > 0 && (now - lastRxByteMs > RAW_FLUSH_TIMEOUT_MS)) {
-    flushRawBufferAsHex();
-  }
 
   if (autoPulseEnabled && (now - lastAutoPulseMs > autoPulsePeriodMs)) {
     lastAutoPulseMs = now;
     triggerPulse();
   }
 
+  markCaptureDoneIfNeeded();
   updateLed();
 }
