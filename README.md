@@ -31,10 +31,18 @@ Only **one transistor and three resistors** are required.
 
 ### Repository structure
   
-firmware/   -> ESP32 firmware  
-hardware/   -> wiring and hardware documentation  
-photos/     -> prototype pictures  
-docs/       -> additional documentation  
+firmware/			-> ESP32 firmware  
+hardware/			-> wiring and hardware documentation  
+hardware/photos/	-> prototype pictures  
+docs/				-> additional documentation 
+ 
+Main branch / stable USB firmware:
+- validated
+- recommended for actual use
+
+BLE branch / experimental:
+- research only
+- not yet compatible with the stable USB mode
 
 ### Features
 - Minimal hardware
